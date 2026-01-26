@@ -5,6 +5,3 @@ curl-cffi               # Necesario para "impersonation" (Bypass de TikTok/YouTu
 # --- Procesamiento de Imagen (utils.py) ---
 numpy                   # Operaciones matemáticas y arrays
 opencv-python           # Funciones de cv2 (resize, dilate, etc.)
-
-# --- Utilidades ---
-pathlib                 # Gestión de rutas de sistema
