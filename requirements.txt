@@ -2,6 +2,3 @@
 yt-dlp                  # Descarga de video principal
 curl-cffi               # Necesario para "impersonation" (Bypass de TikTok/YouTube)
 
-# --- Procesamiento de Imagen (utils.py) ---
-numpy                   # Operaciones matemáticas y arrays
-opencv-python           # Funciones de cv2 (resize, dilate, etc.)
