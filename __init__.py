@@ -4,15 +4,40 @@ import subprocess
 import shutil
 import time
 import webbrowser
+import importlib.util
 from pathlib import Path
 from typing import Tuple
+
+def install_missing_requirements():
+    requirements = [
+        ("yt-dlp", "yt_dlp"),
+        ("curl-cffi", "curl_cffi"),
+        ("numpy", "numpy"),
+        ("opencv-python", "cv2"),
+    ]
+
+    missing = []
+    for pkg, imp in requirements:
+        if importlib.util.find_spec(imp) is None:
+            missing.append(pkg)
+
+    if missing:
+        print(f"📥 ComfyUI-Ytdpl: Instalando dependencias faltantes: {missing}")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", *missing])
+            print("✅ Dependencias instaladas correctamente.")
+        except Exception as e:
+            print(f"❌ Error al instalar dependencias: {e}")
+
+# Ejecutar verificación de requisitos al importar el nodo
+install_missing_requirements()
 
 class YTDLPVideoDownloader:
     def __init__(self):
         self.base_input_path = Path(__file__).parent.parent.parent / "input"
         self.cookies_dir = self.base_input_path / "cookies"
         self.cookies_dir.mkdir(parents=True, exist_ok=True)
-        
+
     @classmethod
     def INPUT_TYPES(cls):
         cookies_folder = Path(__file__).parent.parent.parent / "input" / "cookies"
@@ -36,7 +61,7 @@ class YTDLPVideoDownloader:
                 "format": (formats, {"default": "mp4"}),
             }
         }
-    
+
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("video_path", "info")
     FUNCTION = "download_video"
@@ -47,14 +72,14 @@ class YTDLPVideoDownloader:
             return f"bestaudio[ext={ext}]/bestaudio/best"
         if quality == "best":
             return f"bestvideo[ext={ext}]+bestaudio[ext=m4a]/best[ext={ext}]/best"
-        
+
         h = quality.replace("p", "")
         # Selector robusto: intenta la altura pero permite caer a lo mejor disponible
         return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
 
     def download_video(self, url, cookies_file, force_update, output_dir, filename_template, quality, format):
         start_time = time.time()
-        
+
         if force_update:
             try:
                 subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "-U", "yt-dlp"])
@@ -107,7 +132,7 @@ class YTDLPVideoDownloader:
             if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
                 webbrowser.open(url)
                 raise Exception("🛑 TikTok pide Captcha. Resuélvelo en el navegador y reintenta.")
-            
+
             raise Exception(f"🛑 Error final de descarga:\n{error_stderr[-200:]}")
 
 NODE_CLASS_MAPPINGS = {"YTDLPVideoDownloader": YTDLPVideoDownloader}

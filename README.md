@@ -19,8 +19,9 @@ Nodo de ComfyUI para descargar videos y audio utilizando `yt-dlp` con selección
    ```bash
    git clone https://github.com/tu-usuario/ComfyUI-Ytdpl.git
    ```
-3. Instala las dependencias necesarias:
+3. Entra en la carpeta del nodo e instala las dependencias:
    ```bash
+   cd ComfyUI-Ytdpl
    pip install -r requirements.txt
    ```
 
