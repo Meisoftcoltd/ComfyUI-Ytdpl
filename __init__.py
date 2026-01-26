@@ -3,6 +3,7 @@ import sys
 import subprocess
 import shutil
 import time
+import webbrowser
 from pathlib import Path
 from typing import Tuple
 
@@ -19,15 +20,20 @@ class YTDLPVideoDownloader:
         cookie_files = [f.name for f in cookies_folder.glob("*.txt")]
         if not cookie_files: cookie_files = ["Ninguno"]
 
+        formats = [
+            "mp4", "mkv", "webm", "mov", "avi", "flv", "3gp", "ts", "m4v",
+            "mp3", "m4a", "wav", "flac", "ogg", "opus", "aac", "mka"
+        ]
+
         return {
             "required": {
                 "url": ("STRING", {"multiline": False, "default": ""}),
                 "cookies_file": (cookie_files, ),
-                "force_update": ("BOOLEAN", {"default": True}), # Opción para controlar la actualización
+                "force_update": ("BOOLEAN", {"default": True}),
                 "output_dir": ("STRING", {"multiline": False, "default": "input"}),
                 "filename_template": ("STRING", {"multiline": False, "default": "%(title)s.%(ext)s"}),
                 "quality": (["best", "1080p", "720p", "480p", "360p"], {"default": "best"}),
-                "format": (["mp4", "mkv", "webm"], {"default": "mp4"}),
+                "format": (formats, {"default": "mp4"}),
             }
         }
     
@@ -36,72 +42,73 @@ class YTDLPVideoDownloader:
     FUNCTION = "download_video"
     CATEGORY = "video/download"
 
+    def get_format_string(self, quality, ext, is_audio):
+        if is_audio:
+            return f"bestaudio[ext={ext}]/bestaudio/best"
+        if quality == "best":
+            return f"bestvideo[ext={ext}]+bestaudio[ext=m4a]/best[ext={ext}]/best"
+        
+        h = quality.replace("p", "")
+        # Selector robusto: intenta la altura pero permite caer a lo mejor disponible
+        return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
+
     def download_video(self, url, cookies_file, force_update, output_dir, filename_template, quality, format):
         start_time = time.time()
         
-        # --- PASO 0: ACTUALIZACIÓN EN TIEMPO REAL ---
         if force_update:
-            print("🔄 Verificando actualizaciones de YT-DLP antes de descargar...")
             try:
-                # Ejecutamos pip install -U de forma silenciosa pero efectiva
                 subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "-U", "yt-dlp"])
-                print("✅ YT-DLP está en la última versión.")
-            except Exception as e:
-                print(f"⚠️ No se pudo actualizar en este paso: {e}")
+            except: pass
 
-        # 1. Validar URL
         if not url.strip():
             raise Exception("❌ La URL está vacía.")
 
-        # 2. Configurar rutas
         dest_path = self.base_input_path if output_dir == "input" else Path(output_dir)
         dest_path.mkdir(parents=True, exist_ok=True)
+        is_audio = format in ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aac"]
 
-        # 3. Configurar calidad y formato
-        if quality == "best":
-            format_str = f"bestvideo[ext={format}]+bestaudio[ext=m4a]/best[ext={format}]/best"
+        # --- FUNCIÓN INTERNA DE DESCARGA ---
+        def run_dl(q_val):
+            f_str = self.get_format_string(q_val, format, is_audio)
+            cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "-f", f_str,
+                "--restrict-filenames",
+                "--no-overwrites",
+                "-o", str(dest_path / filename_template),
+                "--no-playlist",
+                "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ]
+            if not is_audio: cmd.extend(["--merge-output-format", format])
+            if cookies_file != "Ninguno":
+                c_path = self.cookies_dir / cookies_file
+                if c_path.exists(): cmd.extend(["--cookies", str(c_path)])
+            cmd.append(url)
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+
+        # --- INTENTO 1: Calidad seleccionada ---
+        print(f"📥 Intentando descargar ({quality}): {url}")
+        result = run_dl(quality)
+
+        # --- INTENTO 2: Fallback a "best" si el primero falló y no era ya "best" ---
+        if result.returncode != 0 and quality != "best":
+            print(f"⚠️ La calidad {quality} falló o no está disponible. Reintentando con 'best'...")
+            result = run_dl("best")
+
+        # --- GESTIÓN DE RESULTADOS ---
+        if result.returncode == 0:
+            files = list(dest_path.glob("*.*"))
+            if not files: raise Exception("Archivo no encontrado.")
+            latest_file = max(files, key=lambda f: f.stat().st_mtime)
+            return (str(latest_file), f"✅ Éxito: {latest_file.name}")
         else:
-            h = quality.replace("p", "")
-            format_str = f"bestvideo[height<={h}][ext={format}]+bestaudio[ext=m4a]/best[height<={h}]"
-
-        # 4. Construir comando
-        command = [
-            sys.executable, "-m", "yt_dlp",
-            "-f", format_str,
-            "--merge-output-format", format,
-            "--restrict-filenames",
-            "--no-overwrites",
-            "-o", str(dest_path / filename_template),
-            "--no-playlist"
-        ]
-
-        if cookies_file != "Ninguno":
-            c_path = self.cookies_dir / cookies_file
-            if c_path.exists():
-                command.extend(["--cookies", str(c_path)])
-
-        command.append(url)
-
-        try:
-            print(f"📥 Descargando: {url}")
-            result = subprocess.run(command, capture_output=True, text=True, timeout=600)
+            error_stderr = result.stderr or ""
+            # Si sigue fallando, comprobamos Captcha
+            if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
+                webbrowser.open(url)
+                raise Exception("🛑 TikTok pide Captcha. Resuélvelo en el navegador y reintenta.")
             
-            if result.returncode == 0:
-                # Buscar el archivo descargado
-                files = list(dest_path.glob("*.*"))
-                if not files: raise Exception("Archivo no encontrado tras descarga.")
-                
-                latest_file = max(files, key=lambda f: f.stat().st_mtime)
-                info = f"✅ Éxito: {latest_file.name} ({time.time()-start_time:.1f}s)"
-                return (str(latest_file), info)
-            
-            else:
-                error_stderr = result.stderr or ""
-                # Si falla, lanzamos el error para que ComfyUI se detenga
-                raise Exception(f"🛑 Error de descarga:\n{error_stderr[-500:]}")
-
-        except Exception as e:
-            raise Exception(f"🛑 Error Crítico: {str(e)}")
+            raise Exception(f"🛑 Error final de descarga:\n{error_stderr[-200:]}")
 
 NODE_CLASS_MAPPINGS = {"YTDLPVideoDownloader": YTDLPVideoDownloader}
-NODE_DISPLAY_NAME_MAPPINGS = {"YTDLPVideoDownloader": "YT-DLP Downloader (Auto-Update) 📥"}
+NODE_DISPLAY_NAME_MAPPINGS = {"YTDLPVideoDownloader": "YT-DLP Downloader (Auto-Quality) 📥"}
