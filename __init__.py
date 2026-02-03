@@ -54,7 +54,7 @@ class YTDLPVideoDownloader:
             "required": {
                 "url": ("STRING", {"multiline": False, "default": ""}),
                 "cookies_file": (cookie_files, ),
-                "force_update": ("BOOLEAN", {"default": True}),
+                "update_yt_dlp": ("BOOLEAN", {"default": False}),
                 "output_dir": ("STRING", {"multiline": False, "default": "input"}),
                 "filename_template": ("STRING", {"multiline": False, "default": "%(title)s.%(ext)s"}),
                 "quality": (["best", "1080p", "720p", "480p", "360p"], {"default": "best"}),
@@ -71,23 +71,31 @@ class YTDLPVideoDownloader:
         if is_audio:
             return f"bestaudio[ext={ext}]/bestaudio/best"
         if quality == "best":
-            return f"bestvideo[ext={ext}]+bestaudio[ext=m4a]/best[ext={ext}]/best"
+            return "bestvideo+bestaudio/best"
 
         h = quality.replace("p", "")
         # Selector robusto: intenta la altura pero permite caer a lo mejor disponible
         return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
 
-    def download_video(self, url, cookies_file, force_update, output_dir, filename_template, quality, format):
+    def download_video(self, url, cookies_file, update_yt_dlp, output_dir, filename_template, quality, format):
         start_time = time.time()
 
-        if force_update:
-            print(f"📥 ComfyUI-Ytdpl: Buscando actualizaciones de yt-dlp...")
+        if update_yt_dlp:
+            print("🔄 ComfyUI-Ytdpl: Iniciando actualización forzada a NIGHTLY...")
             try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "yt-dlp"])
-                version = subprocess.check_output([sys.executable, "-m", "yt_dlp", "--version"], text=True).strip()
-                print(f"✅ yt-dlp actualizado a la versión: {version}")
+                # Usamos check_call para que si falla, lance una excepción visible y detenga el nodo
+                subprocess.check_call([
+                    sys.executable, "-m", "pip", "install",
+                    "--no-cache-dir",     # Evita usar caché vieja
+                    "-U",                 # Force upgrade
+                    "https://github.com/yt-dlp/yt-dlp/archive/master.zip"
+                ])
+                print("✅ ComfyUI-Ytdpl: Actualización Nightly completada.")
+            except subprocess.CalledProcessError as e:
+                # Hacemos el error visible al usuario en la UI
+                raise Exception(f"❌ Error crítico al actualizar yt-dlp: {str(e)}\nRevisa tu conexión a internet.")
             except Exception as e:
-                print(f"⚠️ Error al actualizar yt-dlp: {e}")
+                raise Exception(f"❌ Error inesperado al actualizar: {str(e)}")
 
         if not url.strip():
             raise Exception("❌ La URL está vacía.")
@@ -96,8 +104,8 @@ class YTDLPVideoDownloader:
         dest_path.mkdir(parents=True, exist_ok=True)
         is_audio = format in ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aac"]
 
-        # --- FUNCIÓN INTERNA DE DESCARGA ---
-        def run_dl(q_val):
+        # --- FUNCIÓN INTERNA PARA CONSTRUIR EL COMANDO ---
+        def build_cmd(q_val, get_filename=False):
             f_str = self.get_format_string(q_val, format, is_audio)
             cmd = [
                 sys.executable, "-m", "yt_dlp",
@@ -106,36 +114,68 @@ class YTDLPVideoDownloader:
                 "--no-overwrites",
                 "-o", str(dest_path / filename_template),
                 "--no-playlist",
+                "--extractor-args", "youtube:player_client=android,ios",
                 "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             ]
+            if get_filename:
+                cmd.append("--get-filename")
             if not is_audio: cmd.extend(["--merge-output-format", format])
             if cookies_file != "Ninguno":
                 c_path = self.cookies_dir / cookies_file
                 if c_path.exists(): cmd.extend(["--cookies", str(c_path)])
             cmd.append(url)
-            return subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            return cmd
 
-        # --- INTENTO 1: Calidad seleccionada ---
-        print(f"📥 Intentando descargar ({quality}): {url}")
-        result = run_dl(quality)
+        # --- PASO 1: OBTENER NOMBRE DE ARCHIVO ESPERADO ---
+        print(f"🔍 Calculando nombre de archivo para: {url}")
 
-        # --- INTENTO 2: Fallback a "best" si el primero falló y no era ya "best" ---
-        if result.returncode != 0 and quality != "best":
-            print(f"⚠️ La calidad {quality} falló o no está disponible. Reintentando con 'best'...")
-            result = run_dl("best")
+        # Primero intentamos obtener el nombre con la calidad seleccionada
+        cmd_filename = build_cmd(quality, get_filename=True)
+        filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=60)
+
+        selected_quality = quality
+
+        # Si falla obtener nombre (ej. formato no disponible), intentamos con 'best' si no era ya 'best'
+        if filename_res.returncode != 0 and quality != "best":
+            print(f"⚠️ No se pudo calcular nombre para '{quality}'. Probando con 'best'...")
+            selected_quality = "best"
+            cmd_filename = build_cmd("best", get_filename=True)
+            filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=60)
+
+        if filename_res.returncode != 0:
+             # Si falla incluso calculando nombre, probablemente sea error de red o bloqueo
+            error_stderr = filename_res.stderr or ""
+            if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
+                webbrowser.open(url)
+                raise Exception("🛑 TikTok/YouTube pide Captcha. Resuélvelo en el navegador y reintenta.")
+            raise Exception(f"🛑 Error al obtener información del video:\n{error_stderr[-200:]}")
+
+        expected_filename = filename_res.stdout.strip().splitlines()[-1] # Tomamos la última línea por si hay warnings
+        expected_path = Path(expected_filename)
+        print(f"🎯 Archivo esperado: {expected_path.name}")
+
+        # --- PASO 2: DESCARGAR ---
+        print(f"📥 Iniciando descarga ({selected_quality})...")
+        cmd_dl = build_cmd(selected_quality, get_filename=False)
+        result = subprocess.run(cmd_dl, capture_output=True, text=True, timeout=600)
 
         # --- GESTIÓN DE RESULTADOS ---
         if result.returncode == 0:
-            files = list(dest_path.glob("*.*"))
-            if not files: raise Exception("Archivo no encontrado.")
-            latest_file = max(files, key=lambda f: f.stat().st_mtime)
-            return (str(latest_file), f"✅ Éxito: {latest_file.name}")
+            if expected_path.exists():
+                 return (str(expected_path), f"✅ Éxito: {expected_path.name}")
+            else:
+                 # Fallback raro: yt-dlp dijo OK pero el archivo predicho no está.
+                 # Buscamos el más reciente como último recurso, pero avisando.
+                 print("⚠️ Archivo predicho no encontrado, buscando el más reciente...")
+                 files = list(dest_path.glob("*.*"))
+                 if not files: raise Exception("Archivo no encontrado tras descarga exitosa.")
+                 latest_file = max(files, key=lambda f: f.stat().st_mtime)
+                 return (str(latest_file), f"✅ Éxito (Fallback): {latest_file.name}")
         else:
             error_stderr = result.stderr or ""
-            # Si sigue fallando, comprobamos Captcha
             if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
                 webbrowser.open(url)
-                raise Exception("🛑 TikTok pide Captcha. Resuélvelo en el navegador y reintenta.")
+                raise Exception("🛑 TikTok/YouTube pide Captcha durante descarga.")
 
             raise Exception(f"🛑 Error final de descarga:\n{error_stderr[-200:]}")
 
