@@ -54,7 +54,7 @@ class YTDLPVideoDownloader:
             "required": {
                 "url": ("STRING", {"multiline": False, "default": ""}),
                 "cookies_file": (cookie_files, ),
-                "force_update": ("BOOLEAN", {"default": True}),
+                "update_yt_dlp": ("BOOLEAN", {"default": False}),
                 "output_dir": ("STRING", {"multiline": False, "default": "input"}),
                 "filename_template": ("STRING", {"multiline": False, "default": "%(title)s.%(ext)s"}),
                 "quality": (["best", "1080p", "720p", "480p", "360p"], {"default": "best"}),
@@ -71,23 +71,31 @@ class YTDLPVideoDownloader:
         if is_audio:
             return f"bestaudio[ext={ext}]/bestaudio/best"
         if quality == "best":
-            return f"bestvideo[ext={ext}]+bestaudio[ext=m4a]/best[ext={ext}]/best"
+            return "bestvideo+bestaudio/best"
 
         h = quality.replace("p", "")
         # Selector robusto: intenta la altura pero permite caer a lo mejor disponible
         return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
 
-    def download_video(self, url, cookies_file, force_update, output_dir, filename_template, quality, format):
+    def download_video(self, url, cookies_file, update_yt_dlp, output_dir, filename_template, quality, format):
         start_time = time.time()
 
-        if force_update:
-            print(f"📥 ComfyUI-Ytdpl: Buscando actualizaciones de yt-dlp...")
+        if update_yt_dlp:
+            print("🔄 ComfyUI-Ytdpl: Iniciando actualización forzada a NIGHTLY...")
             try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "yt-dlp"])
-                version = subprocess.check_output([sys.executable, "-m", "yt_dlp", "--version"], text=True).strip()
-                print(f"✅ yt-dlp actualizado a la versión: {version}")
+                # Usamos check_call para que si falla, lance una excepción visible y detenga el nodo
+                subprocess.check_call([
+                    sys.executable, "-m", "pip", "install",
+                    "--no-cache-dir",     # Evita usar caché vieja
+                    "-U",                 # Force upgrade
+                    "https://github.com/yt-dlp/yt-dlp/archive/master.zip"
+                ])
+                print("✅ ComfyUI-Ytdpl: Actualización Nightly completada.")
+            except subprocess.CalledProcessError as e:
+                # Hacemos el error visible al usuario en la UI
+                raise Exception(f"❌ Error crítico al actualizar yt-dlp: {str(e)}\nRevisa tu conexión a internet.")
             except Exception as e:
-                print(f"⚠️ Error al actualizar yt-dlp: {e}")
+                raise Exception(f"❌ Error inesperado al actualizar: {str(e)}")
 
         if not url.strip():
             raise Exception("❌ La URL está vacía.")
@@ -106,6 +114,7 @@ class YTDLPVideoDownloader:
                 "--no-overwrites",
                 "-o", str(dest_path / filename_template),
                 "--no-playlist",
+                "--extractor-args", "youtube:player_client=android,ios",
                 "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             ]
             if not is_audio: cmd.extend(["--merge-output-format", format])
