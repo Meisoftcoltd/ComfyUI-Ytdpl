@@ -81,9 +81,13 @@ class YTDLPVideoDownloader:
         start_time = time.time()
 
         if force_update:
+            print(f"📥 ComfyUI-Ytdpl: Buscando actualizaciones de yt-dlp...")
             try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "-U", "yt-dlp"])
-            except: pass
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "yt-dlp"])
+                version = subprocess.check_output([sys.executable, "-m", "yt_dlp", "--version"], text=True).strip()
+                print(f"✅ yt-dlp actualizado a la versión: {version}")
+            except Exception as e:
+                print(f"⚠️ Error al actualizar yt-dlp: {e}")
 
         if not url.strip():
             raise Exception("❌ La URL está vacía.")
