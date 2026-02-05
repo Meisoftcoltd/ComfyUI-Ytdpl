@@ -130,8 +130,9 @@ class YTDLPVideoDownloader:
         print(f"🔍 Calculando nombre de archivo para: {url}")
 
         # Primero intentamos obtener el nombre con la calidad seleccionada
+        # Timeout aumentado a 30 mins para listas grandes
         cmd_filename = build_cmd(quality, get_filename=True)
-        filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=60)
+        filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=1800)
 
         selected_quality = quality
 
@@ -140,7 +141,7 @@ class YTDLPVideoDownloader:
             print(f"⚠️ No se pudo calcular nombre para '{quality}'. Probando con 'best'...")
             selected_quality = "best"
             cmd_filename = build_cmd("best", get_filename=True)
-            filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=60)
+            filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=1800)
 
         if filename_res.returncode != 0:
              # Si falla incluso calculando nombre, probablemente sea error de red o bloqueo
@@ -157,7 +158,8 @@ class YTDLPVideoDownloader:
         # --- PASO 2: DESCARGAR ---
         print(f"📥 Iniciando descarga ({selected_quality})...")
         cmd_dl = build_cmd(selected_quality, get_filename=False)
-        result = subprocess.run(cmd_dl, capture_output=True, text=True, timeout=600)
+        # Timeout aumentado a 24 horas para canales completos
+        result = subprocess.run(cmd_dl, capture_output=True, text=True, timeout=86400)
 
         # --- GESTIÓN DE RESULTADOS ---
         if result.returncode == 0:
