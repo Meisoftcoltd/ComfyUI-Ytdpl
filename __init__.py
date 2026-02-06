@@ -78,8 +78,6 @@ class YTDLPVideoDownloader:
         return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
 
     def download_video(self, url, cookies_file, update_yt_dlp, output_dir, filename_template, quality, format):
-        start_time = time.time()
-
         if update_yt_dlp:
             print("🔄 ComfyUI-Ytdpl: Iniciando actualización forzada a NIGHTLY...")
             try:
