@@ -88,9 +88,9 @@ class YTDLPVideoDownloader:
                     sys.executable, "-m", "pip", "install",
                     "--no-cache-dir",     # Evita usar caché vieja
                     "-U",                 # Force upgrade
-                    "https://github.com/yt-dlp/yt-dlp/archive/master.zip"
+                    "yt-dlp"
                 ])
-                print("✅ ComfyUI-Ytdpl: Actualización Nightly completada.")
+                print("✅ ComfyUI-Ytdpl: Actualización completada.")
             except subprocess.CalledProcessError as e:
                 # Hacemos el error visible al usuario en la UI
                 raise Exception(f"❌ Error crítico al actualizar yt-dlp: {str(e)}\nRevisa tu conexión a internet.")
