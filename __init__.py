@@ -97,7 +97,18 @@ class YTDLPVideoDownloader:
         if not url.strip():
             raise Exception("❌ La URL está vacía.")
 
-        dest_path = self.base_input_path if output_dir == "input" else Path(output_dir)
+        # Seguridad: Validar que el directorio de salida esté dentro de base_input_path
+        if output_dir == "input":
+            dest_path = self.base_input_path
+        else:
+            p = Path(output_dir)
+            dest_path = p if p.is_absolute() else self.base_input_path / output_dir
+
+        try:
+            dest_path.resolve().relative_to(self.base_input_path.resolve())
+        except ValueError:
+            raise Exception(f"❌ Error de seguridad: El directorio '{output_dir}' no está permitido. Debe estar dentro de 'input'.")
+
         dest_path.mkdir(parents=True, exist_ok=True)
 
         # SECURITY CHECK
