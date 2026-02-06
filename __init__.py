@@ -3,7 +3,6 @@ import sys
 import subprocess
 import shutil
 import time
-import webbrowser
 import importlib.util
 from pathlib import Path
 from typing import Tuple
