@@ -102,6 +102,22 @@ class YTDLPVideoDownloader:
 
         dest_path = self.base_input_path if output_dir == "input" else Path(output_dir)
         dest_path.mkdir(parents=True, exist_ok=True)
+
+        # SECURITY CHECK
+        if Path(filename_template).is_absolute():
+             raise Exception("❌ Error de Seguridad: filename_template no puede ser una ruta absoluta.")
+
+        try:
+            full_output_path = (dest_path / filename_template).resolve()
+            resolved_dest = dest_path.resolve()
+            if not full_output_path.is_relative_to(resolved_dest):
+                 raise Exception("❌ Error de Seguridad: filename_template intenta salir del directorio de destino.")
+        except Exception as e:
+             if "Error de Seguridad" in str(e): raise
+             # Si falla resolve() es posible que la ruta no sea válida, lo cual es otro tipo de error
+             # pero por seguridad asumimos lo peor si no podemos validarlo
+             raise Exception(f"❌ Error al validar ruta de salida: {str(e)}")
+
         is_audio = format in ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aac"]
 
         # --- FUNCIÓN INTERNA PARA CONSTRUIR EL COMANDO ---
