@@ -146,7 +146,8 @@ class YTDLPVideoDownloader:
         if filename_res.returncode != 0:
              # Si falla incluso calculando nombre, probablemente sea error de red o bloqueo
             error_stderr = filename_res.stderr or ""
-            if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
+            error_stderr_lower = error_stderr.lower()
+            if any(x in error_stderr_lower for x in ["captcha", "403", "forbidden", "verify"]):
                 webbrowser.open(url)
                 raise Exception("🛑 TikTok/YouTube pide Captcha. Resuélvelo en el navegador y reintenta.")
             raise Exception(f"🛑 Error al obtener información del video:\n{error_stderr[-200:]}")
@@ -175,7 +176,8 @@ class YTDLPVideoDownloader:
                  return (str(latest_file), f"✅ Éxito (Fallback): {latest_file.name}")
         else:
             error_stderr = result.stderr or ""
-            if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
+            error_stderr_lower = error_stderr.lower()
+            if any(x in error_stderr_lower for x in ["captcha", "403", "forbidden", "verify"]):
                 webbrowser.open(url)
                 raise Exception("🛑 TikTok/YouTube pide Captcha durante descarga.")
 
