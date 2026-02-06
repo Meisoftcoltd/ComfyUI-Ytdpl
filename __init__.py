@@ -3,7 +3,6 @@ import sys
 import subprocess
 import shutil
 import time
-import webbrowser
 import importlib.util
 from pathlib import Path
 from typing import Tuple
@@ -147,7 +146,6 @@ class YTDLPVideoDownloader:
              # Si falla incluso calculando nombre, probablemente sea error de red o bloqueo
             error_stderr = filename_res.stderr or ""
             if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
-                webbrowser.open(url)
                 raise Exception("🛑 TikTok/YouTube pide Captcha. Resuélvelo en el navegador y reintenta.")
             raise Exception(f"🛑 Error al obtener información del video:\n{error_stderr[-200:]}")
 
@@ -176,7 +174,6 @@ class YTDLPVideoDownloader:
         else:
             error_stderr = result.stderr or ""
             if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
-                webbrowser.open(url)
                 raise Exception("🛑 TikTok/YouTube pide Captcha durante descarga.")
 
             raise Exception(f"🛑 Error final de descarga:\n{error_stderr[-200:]}")
