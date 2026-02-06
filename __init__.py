@@ -77,8 +77,6 @@ class YTDLPVideoDownloader:
         return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
 
     def download_video(self, url, cookies_file, update_yt_dlp, output_dir, filename_template, quality, format):
-        start_time = time.time()
-
         if update_yt_dlp:
             print("🔄 ComfyUI-Ytdpl: Iniciando actualización forzada a NIGHTLY...")
             try:
@@ -87,9 +85,9 @@ class YTDLPVideoDownloader:
                     sys.executable, "-m", "pip", "install",
                     "--no-cache-dir",     # Evita usar caché vieja
                     "-U",                 # Force upgrade
-                    "https://github.com/yt-dlp/yt-dlp/archive/master.zip"
+                    "yt-dlp"
                 ])
-                print("✅ ComfyUI-Ytdpl: Actualización Nightly completada.")
+                print("✅ ComfyUI-Ytdpl: Actualización completada.")
             except subprocess.CalledProcessError as e:
                 # Hacemos el error visible al usuario en la UI
                 raise Exception(f"❌ Error crítico al actualizar yt-dlp: {str(e)}\nRevisa tu conexión a internet.")
@@ -145,7 +143,9 @@ class YTDLPVideoDownloader:
         if filename_res.returncode != 0:
              # Si falla incluso calculando nombre, probablemente sea error de red o bloqueo
             error_stderr = filename_res.stderr or ""
-            if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
+            error_stderr_lower = error_stderr.lower()
+            if any(x in error_stderr_lower for x in ["captcha", "403", "forbidden", "verify"]):
+                webbrowser.open(url)
                 raise Exception("🛑 TikTok/YouTube pide Captcha. Resuélvelo en el navegador y reintenta.")
             raise Exception(f"🛑 Error al obtener información del video:\n{error_stderr[-200:]}")
 
@@ -173,7 +173,9 @@ class YTDLPVideoDownloader:
                  return (str(latest_file), f"✅ Éxito (Fallback): {latest_file.name}")
         else:
             error_stderr = result.stderr or ""
-            if any(x in error_stderr.lower() for x in ["captcha", "403", "forbidden", "verify"]):
+            error_stderr_lower = error_stderr.lower()
+            if any(x in error_stderr_lower for x in ["captcha", "403", "forbidden", "verify"]):
+                webbrowser.open(url)
                 raise Exception("🛑 TikTok/YouTube pide Captcha durante descarga.")
 
             raise Exception(f"🛑 Error final de descarga:\n{error_stderr[-200:]}")
