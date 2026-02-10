@@ -128,6 +128,7 @@ class YTDLPVideoDownloader:
 
         is_audio = format in ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aac"]
 
+
         # --- FUNCIÓN INTERNA PARA CONSTRUIR EL COMANDO ---
         def build_cmd(q_val, get_filename=False):
             f_str = self.get_format_string(q_val, format, is_audio)
@@ -137,19 +138,36 @@ class YTDLPVideoDownloader:
                 "--restrict-filenames",
                 "--no-overwrites",
                 "-o", str(dest_path / filename_template),
-                "--no-playlist",
-                "--extractor-args", "youtube:player_client=android,ios",
-                "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                
+                # --- CAMBIOS CRÍTICOS AQUÍ ---
+                
+                # 1. PERMITIR PLAYLISTS:
+                # Comentamos esto para que no corte después del primer video
+                # "--no-playlist",  
+                "--yes-playlist", 
+
+                # 2. ELIMINAR CLIENTE MÓVIL FORZADO:
+                # Esto suele chocar con cookies de navegador de escritorio (Chromium)
+                # "--extractor-args", "youtube:player_client=android,ios",
+
+                # 3. ELIMINAR EL USER-AGENT FALSO (EL CULPABLE PRINCIPAL):
+                # Al quitar esto, yt-dlp usará el agente real de tus cookies
+                # "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             ]
             if get_filename:
                 cmd.append("--get-filename")
-            if not is_audio: cmd.extend(["--merge-output-format", format])
+            
+            # Solo añadir merge si no es solo audio
+            if not is_audio: 
+                cmd.extend(["--merge-output-format", format])
+            
             if cookies_file != "Ninguno":
                 c_path = self.cookies_dir / cookies_file
-                if c_path.exists(): cmd.extend(["--cookies", str(c_path)])
+                if c_path.exists(): 
+                    cmd.extend(["--cookies", str(c_path)])
+            
             cmd.append(url)
             return cmd
-
         # --- PASO 1: OBTENER NOMBRE DE ARCHIVO ESPERADO ---
         print(f"🔍 Calculando nombre de archivo para: {url}")
 
