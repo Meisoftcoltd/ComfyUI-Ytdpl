@@ -53,6 +53,7 @@ class YTDLPVideoDownloader:
             "required": {
                 "url": ("STRING", {"multiline": False, "default": ""}),
                 "cookies_file": (cookie_files, ),
+                "browser_source": (["Ninguno", "Chrome", "Firefox", "Safari", "Edge"], {"default": "Ninguno"}),
                 "update_yt_dlp": ("BOOLEAN", {"default": False}),
                 "output_dir": ("STRING", {"multiline": False, "default": "input"}),
                 "filename_template": ("STRING", {"multiline": False, "default": "%(title)s.%(ext)s"}),
@@ -76,7 +77,7 @@ class YTDLPVideoDownloader:
         # Selector robusto: intenta la altura pero permite caer a lo mejor disponible
         return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
 
-    def download_video(self, url, cookies_file, update_yt_dlp, output_dir, filename_template, quality, format):
+    def download_video(self, url, cookies_file, browser_source, update_yt_dlp, output_dir, filename_template, quality, format):
         if update_yt_dlp:
             print("🔄 ComfyUI-Ytdpl: Iniciando actualización forzada a NIGHTLY...")
             try:
@@ -154,6 +155,19 @@ class YTDLPVideoDownloader:
                 # Al quitar esto, yt-dlp usará el agente real de tus cookies
                 # "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             ]
+
+            # 4. AÑADIR IMPERSONATE SI SE SELECCIONA NAVEGADOR
+            if browser_source != "Ninguno":
+                browser_map = {
+                    "Chrome": "chrome-110",
+                    "Firefox": "firefox-133",
+                    "Safari": "safari-17.0",
+                    "Edge": "edge-101"
+                }
+                target = browser_map.get(browser_source)
+                if target:
+                    cmd.extend(["--impersonate", target])
+
             if get_filename:
                 cmd.append("--get-filename")
             
