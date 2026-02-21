@@ -64,7 +64,6 @@ class YTDLPVideoDownloader:
                 "browser_source": (["Ninguno", "Chrome", "Firefox", "Safari", "Edge"], {"default": "Ninguno"}),
                 "update_yt_dlp": ("BOOLEAN", {"default": False}),
                 "output_dir": ("STRING", {"multiline": False, "default": "input"}),
-                "filename_template": ("STRING", {"multiline": False, "default": "%(title)s.%(ext)s"}),
                 "quality": (["best", "1080p", "720p", "480p", "360p"], {"default": "best"}),
                 "format": (formats, {"default": "mp4"}),
             }
@@ -84,7 +83,7 @@ class YTDLPVideoDownloader:
         h = quality.replace("p", "")
         return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
 
-    def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, output_dir, filename_template, quality, format):
+    def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, output_dir, quality, format):
         if update_yt_dlp:
             print("🔄 ComfyUI-Ytdpl: Iniciando actualización forzada a NIGHTLY y motor EJS...")
             try:
@@ -112,18 +111,6 @@ class YTDLPVideoDownloader:
             dest_path.resolve().relative_to(self.base_input_path.resolve())
         except ValueError:
             raise Exception(f"❌ Error de seguridad: El directorio '{output_dir}' no está permitido. Debe estar dentro de 'input'.")
-
-        if Path(filename_template).is_absolute():
-             raise Exception("❌ Error de Seguridad: filename_template no puede ser una ruta absoluta.")
-
-        try:
-            full_output_path = (dest_path / filename_template).resolve()
-            resolved_dest = dest_path.resolve()
-            if not full_output_path.is_relative_to(resolved_dest):
-                 raise Exception("❌ Error de Seguridad: filename_template intenta salir del directorio de destino.")
-        except Exception as e:
-             if "Error de Seguridad" in str(e): raise
-             raise Exception(f"❌ Error al validar ruta de salida: {str(e)}")
 
         is_audio = format in ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aac"]
 
@@ -154,7 +141,6 @@ class YTDLPVideoDownloader:
                 "-f", f_str,
                 "--restrict-filenames",
                 "--no-overwrites",
-                "-o", str(dest_path / filename_template),
                 "--yes-playlist", 
                 "--remote-components", "ejs:github"
             ]
