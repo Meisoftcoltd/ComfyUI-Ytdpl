@@ -43,6 +43,8 @@ class YTDLPVideoDownloader:
         self.base_input_path = Path(__file__).parent.parent.parent / "input"
         self.cookies_dir = self.base_input_path / "cookies"
         self.cookies_dir.mkdir(parents=True, exist_ok=True)
+        self.output_dir = Path(__file__).parent.parent.parent / "output" / "ytdpl"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -63,7 +65,6 @@ class YTDLPVideoDownloader:
                 "cookies_file": (cookie_files, ),
                 "browser_source": (["Ninguno", "Chrome", "Firefox", "Safari", "Edge"], {"default": "Ninguno"}),
                 "update_yt_dlp": ("BOOLEAN", {"default": False}),
-                "output_dir": ("STRING", {"multiline": False, "default": "input"}),
                 "quality": (["best", "1080p", "720p", "480p", "360p"], {"default": "best"}),
                 "format": (formats, {"default": "mp4"}),
             }
@@ -83,7 +84,7 @@ class YTDLPVideoDownloader:
         h = quality.replace("p", "")
         return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
 
-    def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, output_dir, quality, format):
+    def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, quality, format):
         if update_yt_dlp:
             print("🔄 ComfyUI-Ytdpl: Iniciando actualización forzada a NIGHTLY y motor EJS...")
             try:
@@ -101,16 +102,7 @@ class YTDLPVideoDownloader:
         if not url.strip():
             raise Exception("❌ La URL está vacía.")
 
-        if output_dir == "input":
-            dest_path = self.base_input_path
-        else:
-            p = Path(output_dir)
-            dest_path = p if p.is_absolute() else self.base_input_path / output_dir
-
-        try:
-            dest_path.resolve().relative_to(self.base_input_path.resolve())
-        except ValueError:
-            raise Exception(f"❌ Error de seguridad: El directorio '{output_dir}' no está permitido. Debe estar dentro de 'input'.")
+        dest_path = self.output_dir
 
         is_audio = format in ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aac"]
 
@@ -140,6 +132,7 @@ class YTDLPVideoDownloader:
                 sys.executable, "-m", "yt_dlp",
                 "-f", f_str,
                 "--restrict-filenames",
+                "-P", str(dest_path),
                 "--no-overwrites",
                 "--yes-playlist", 
                 "--remote-components", "ejs:github"
