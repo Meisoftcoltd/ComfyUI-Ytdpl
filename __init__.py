@@ -70,7 +70,7 @@ class YTDLPVideoDownloader:
             }
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_TYPES = ("*", "STRING")
     RETURN_NAMES = ("video_path", "info")
     FUNCTION = "download_video"
     CATEGORY = "video/download"
