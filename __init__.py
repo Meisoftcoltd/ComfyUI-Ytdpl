@@ -20,6 +20,7 @@ def install_missing_requirements():
         ("numpy", "numpy"),
         ("opencv-python", "cv2"),
         ("websockets", "websockets"),
+        ("playwright", "playwright"),
     ]
 
     missing = []
@@ -32,11 +33,65 @@ def install_missing_requirements():
         try:
             subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", *missing, "yt-dlp-ejs"])
             print("✅ Dependencias instaladas correctamente.")
+            if "playwright" in missing:
+                print("📥 Instalando navegadores de Playwright...")
+                subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+                print("✅ Navegadores de Playwright instalados.")
         except Exception as e:
             print(f"❌ Error al instalar dependencias: {e}")
 
 # Ejecutar verificación de requisitos al importar el nodo
 install_missing_requirements()
+
+def get_cookies_interactively(url, save_path):
+    from playwright.sync_api import sync_playwright
+    import platform
+
+    print("\n" + "="*60)
+    print("🌐 [AUTO-COOKIE] Abriendo navegador para intervención manual...")
+    print(f"🖥️ Sistema detectado: {platform.system()}")
+    print("👉 POR FAVOR: Resuelve el Captcha o inicia sesión en la ventana.")
+    print("👉 IMPORTANTE: Cuando el video empiece a reproducirse, CIERRA LA VENTANA.")
+    print("="*60 + "\n")
+
+    try:
+        with sync_playwright() as p:
+            # En Windows/Mac abrirá su ventana nativa. En Linux usará X11/Wayland/WSLg.
+            browser = p.chromium.launch(headless=False)
+            context = browser.new_context()
+            page = context.new_page()
+            page.goto(url)
+
+            # Esperar a que el usuario cierre la ventana
+            try:
+                page.wait_for_event("close", timeout=0)
+            except Exception:
+                pass # Ventana cerrada por el usuario
+
+            print("⚙️ [AUTO-COOKIE] Extrayendo sesión...")
+            cookies = context.cookies()
+
+            # Convertir a formato Netscape (yt-dlp compatible)
+            with open(save_path, 'w', encoding='utf-8') as f:
+                f.write("# Netscape HTTP Cookie File\n")
+                for c in cookies:
+                    domain = c.get('domain', '')
+                    include_subdomains = 'TRUE' if domain.startswith('.') else 'FALSE'
+                    path_val = c.get('path', '/')
+                    secure = 'TRUE' if c.get('secure', False) else 'FALSE'
+                    expires = str(int(c.get('expires', 0)))
+                    name = c.get('name', '')
+                    value = c.get('value', '')
+                    f.write(f"{domain}\t{include_subdomains}\t{path_val}\t{secure}\t{expires}\t{name}\t{value}\n")
+
+            browser.close()
+        print("✅ [AUTO-COOKIE] Cookies guardadas con éxito. Reintentando descarga...")
+        return True
+
+    except Exception as e:
+        print(f"\n⚠️ [AUTO-COOKIE] Interfaz gráfica no disponible: {e}")
+        print("👉 (Esto es normal en servidores remotos sin pantalla o configuraciones estrictas).")
+        return False
 
 class YTDLPVideoDownloader:
     def __init__(self):
@@ -126,104 +181,120 @@ class YTDLPVideoDownloader:
             else:
                 print(f"⚠️ El archivo {cookies_file} no existe. Continuando sin cookies.")
 
-        def build_cmd(q_val, get_filename=False):
-            f_str = self.get_format_string(q_val, format, is_audio)
-            cmd = [
-                sys.executable, "-m", "yt_dlp",
-                "-f", f_str,
-                "--restrict-filenames",
-                "-P", str(dest_path),
-                "--no-overwrites",
-                "--yes-playlist", 
-                "--remote-components", "ejs:github"
-            ]
+        auto_cookie_path = self.cookies_dir / "auto_cookies.txt"
 
-            if cookie_path_to_use:
-                cmd.extend(["--cookies", str(cookie_path_to_use)])
-                cmd.extend(["--extractor-args", "youtube:player_client=tv_downgraded,web"])
-            else:
-                cmd.extend(["--extractor-args", "youtube:player_client=android,tv"])
+        for attempt in range(2):
+            try:
+                def build_cmd(q_val, get_filename=False):
+                    f_str = self.get_format_string(q_val, format, is_audio)
+                    cmd = [
+                        sys.executable, "-m", "yt_dlp",
+                        "-f", f_str,
+                        "--restrict-filenames",
+                        "-P", str(dest_path),
+                        "--no-overwrites",
+                        "--yes-playlist",
+                        "--remote-components", "ejs:github"
+                    ]
 
-            # === CAMBIO: USAR NOMBRES GENÉRICOS DE NAVEGADOR PARA CURL-CFFI ===
-            if browser_source != "Ninguno":
-                browser_map = {
-                    "Chrome": "chrome",
-                    "Firefox": "firefox",
-                    "Safari": "safari",
-                    "Edge": "edge"
-                }
-                target = browser_map.get(browser_source)
-                if target:
-                    cmd.extend(["--impersonate", target])
+                    if cookie_path_to_use:
+                        cmd.extend(["--cookies", str(cookie_path_to_use)])
+                        cmd.extend(["--extractor-args", "youtube:player_client=tv_downgraded,web"])
+                    else:
+                        cmd.extend(["--extractor-args", "youtube:player_client=android,tv"])
 
-            if get_filename:
-                cmd.append("--get-filename")
-            
-            if not is_audio: 
-                cmd.extend(["--merge-output-format", format])
-            
-            cmd.append(url)
-            return cmd
+                    # === CAMBIO: USAR NOMBRES GENÉRICOS DE NAVEGADOR PARA CURL-CFFI ===
+                    if browser_source != "Ninguno":
+                        browser_map = {
+                            "Chrome": "chrome",
+                            "Firefox": "firefox",
+                            "Safari": "safari",
+                            "Edge": "edge"
+                        }
+                        target = browser_map.get(browser_source)
+                        if target:
+                            cmd.extend(["--impersonate", target])
 
-        print(f"🔍 Calculando nombre de archivo para: {url}")
+                    if get_filename:
+                        cmd.append("--get-filename")
 
-        cmd_filename = build_cmd(quality, get_filename=True)
-        filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=1800)
+                    if not is_audio:
+                        cmd.extend(["--merge-output-format", format])
 
-        selected_quality = quality
+                    cmd.append(url)
+                    return cmd
 
-        if filename_res.returncode != 0 and quality != "best":
-            print(f"⚠️ No se pudo calcular nombre para '{quality}'. Probando con 'best'...")
-            selected_quality = "best"
-            cmd_filename = build_cmd("best", get_filename=True)
-            filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=1800)
+                print(f"🔍 Calculando nombre de archivo para: {url}")
 
-        if filename_res.returncode != 0:
-            error_stderr = filename_res.stderr or ""
-            error_stderr_lower = error_stderr.lower()
-            if any(x in error_stderr_lower for x in ["captcha", "403", "forbidden", "verify", "sign in", "private"]):
-                raise Exception("🛑 TikTok/YouTube pide Captcha o Login. Pega un texto nuevo en el campo 'cookies_text'.")
-            
-            if "permission denied" in error_stderr_lower:
-                raise Exception(f"🛑 Error de permisos con el archivo de cookies seleccionado ({cookies_file}). SOLUCIÓN: Abre ese archivo en texto plano, copia todo, pégalo en el cajón 'cookies_text' de ComfyUI y borra el archivo original problemático.")
-                
-            raise Exception(f"🛑 Error al obtener información del video:\n{error_stderr[-200:]}")
+                cmd_filename = build_cmd(quality, get_filename=True)
+                filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=1800)
 
-        expected_filename = filename_res.stdout.strip().splitlines()[-1] 
-        expected_path = Path(expected_filename)
-        print(f"🎯 Archivo esperado: {expected_path.name}")
+                selected_quality = quality
 
-        print(f"📥 Iniciando descarga ({selected_quality})...")
-        cmd_dl = build_cmd(selected_quality, get_filename=False)
-        
-        print("\n--- Registro de yt-dlp (ComfyUI) ---")
-        proc = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-        
-        output_lines = []
-        for line in proc.stdout:
-            sys.stdout.write(line)
-            sys.stdout.flush()
-            output_lines.append(line)
-        
-        proc.wait()
-        output = "".join(output_lines)
-        print("------------------------------------\n")
+                if filename_res.returncode != 0 and quality != "best":
+                    print(f"⚠️ No se pudo calcular nombre para '{quality}'. Probando con 'best'...")
+                    selected_quality = "best"
+                    cmd_filename = build_cmd("best", get_filename=True)
+                    filename_res = subprocess.run(cmd_filename, capture_output=True, text=True, timeout=1800)
 
-        if proc.returncode == 0:
-            if expected_path.exists():
-                 return (str(expected_path), f"✅ Éxito: {expected_path.name}")
-            else:
-                 print("⚠️ Archivo predicho no encontrado, buscando el más reciente...")
-                 files = list(dest_path.glob("*.*"))
-                 if not files: raise Exception("Archivo no encontrado tras descarga exitosa.")
-                 latest_file = max(files, key=lambda f: f.stat().st_mtime)
-                 return (str(latest_file), f"✅ Éxito (Fallback): {latest_file.name}")
-        else:
-            error_stderr_lower = output.lower()
-            if any(x in error_stderr_lower for x in ["captcha", "403", "forbidden", "verify", "sign in", "js challenge", "private"]):
-                raise Exception("🛑 YouTube/TikTok bloqueó la descarga (Requiere Sesión/Captcha). Pega tu texto de cookies actualizado en el nodo.")
+                if filename_res.returncode != 0:
+                    error_stderr = filename_res.stderr or ""
+                    error_stderr_lower = error_stderr.lower()
+                    if "permission denied" in error_stderr_lower:
+                        raise Exception(f"🛑 Error de permisos con el archivo de cookies seleccionado ({cookies_file}). SOLUCIÓN: Abre ese archivo en texto plano, copia todo, pégalo en el cajón 'cookies_text' de ComfyUI y borra el archivo original problemático.")
+                    raise Exception(f"YT_DLP_ERROR: {error_stderr}")
 
-            raise Exception(f"🛑 Error final de descarga:\n{output[-200:]}")
+                expected_filename = filename_res.stdout.strip().splitlines()[-1]
+                expected_path = Path(expected_filename)
+                print(f"🎯 Archivo esperado: {expected_path.name}")
+
+                print(f"📥 Iniciando descarga ({selected_quality})...")
+                cmd_dl = build_cmd(selected_quality, get_filename=False)
+
+                print("\n--- Registro de yt-dlp (ComfyUI) ---")
+                proc = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+
+                output_lines = []
+                for line in proc.stdout:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                    output_lines.append(line)
+
+                proc.wait()
+                output = "".join(output_lines)
+                print("------------------------------------\n")
+
+                if proc.returncode == 0:
+                    if expected_path.exists():
+                         return (str(expected_path), f"✅ Éxito: {expected_path.name}")
+                    else:
+                         print("⚠️ Archivo predicho no encontrado, buscando el más reciente...")
+                         files = list(dest_path.glob("*.*"))
+                         if not files: raise Exception("Archivo no encontrado tras descarga exitosa.")
+                         latest_file = max(files, key=lambda f: f.stat().st_mtime)
+                         return (str(latest_file), f"✅ Éxito (Fallback): {latest_file.name}")
+                else:
+                    raise Exception(f"YT_DLP_ERROR: {output}")
+
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "yt_dlp_error:" in error_msg:
+                    # Check for blocking keywords
+                    if any(x in error_msg for x in ["captcha", "403", "forbidden", "verify", "sign in", "js challenge", "private"]):
+                        if attempt == 0:
+                            print("🛑 Bloqueo detectado. Lanzando Auto-Cookie...")
+                            success = get_cookies_interactively(url, auto_cookie_path)
+                            if success:
+                                cookie_path_to_use = str(auto_cookie_path)
+                                continue
+                            else:
+                                raise Exception("🛑 YouTube/TikTok bloqueó la descarga (Requiere Sesión/Captcha) y la interfaz gráfica falló. Pega tu texto de cookies actualizado en el nodo de forma manual.")
+                        else:
+                            raise Exception(f"🛑 Error final de descarga:\n{error_msg[-200:]}")
+                    else:
+                        raise Exception(f"🛑 Error en yt-dlp:\n{error_msg[-200:]}")
+                else:
+                    raise e
 
 NODE_CLASS_MAPPINGS = {"YTDLPVideoDownloader": YTDLPVideoDownloader}
 NODE_DISPLAY_NAME_MAPPINGS = {"YTDLPVideoDownloader": "YT-DLP Downloader (Auto-Quality) 📥"}
