@@ -125,10 +125,18 @@ class YTDLPVideoDownloader:
             }
         }
 
-    RETURN_TYPES = ("*", "STRING")
-    RETURN_NAMES = ("video_path", "info")
+    RETURN_TYPES = ("*", "STRING", "STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("video_path", "info", "title", "description", "thumbnail_url", "channel")
     FUNCTION = "download_video"
     CATEGORY = "video/download"
+
+    @classmethod
+    def IS_CHANGED(cls, url, cookies_text, cookies_file, browser_source, update_yt_dlp, quality, format):
+        import hashlib
+        state_string = f"{url}_{cookies_text}_{cookies_file}_{browser_source}_{quality}_{format}"
+        m = hashlib.sha256()
+        m.update(state_string.encode('utf-8'))
+        return m.digest().hex()
 
     def get_format_string(self, quality, ext, is_audio):
         if is_audio:
@@ -221,6 +229,9 @@ class YTDLPVideoDownloader:
                     if not is_audio:
                         cmd.extend(["--merge-output-format", format])
 
+                    # Pedir a yt-dlp que genere un archivo con todos los metadatos
+                    cmd.append("--write-info-json")
+
                     cmd.append(url)
                     return cmd
 
@@ -265,14 +276,34 @@ class YTDLPVideoDownloader:
                 print("------------------------------------\n")
 
                 if proc.returncode == 0:
+                    final_path = None
                     if expected_path.exists():
-                         return (str(expected_path), f"✅ Éxito: {expected_path.name}")
+                        final_path = expected_path
                     else:
-                         print("⚠️ Archivo predicho no encontrado, buscando el más reciente...")
-                         files = list(dest_path.glob("*.*"))
-                         if not files: raise Exception("Archivo no encontrado tras descarga exitosa.")
-                         latest_file = max(files, key=lambda f: f.stat().st_mtime)
-                         return (str(latest_file), f"✅ Éxito (Fallback): {latest_file.name}")
+                        print("⚠️ Archivo predicho no encontrado, buscando el más reciente...")
+                        # Filtramos los .json para no seleccionar el archivo de metadatos por error
+                        files = [f for f in dest_path.glob("*.*") if not f.name.endswith(".json")]
+                        if not files: raise Exception("Archivo de video no encontrado tras descarga exitosa.")
+                        final_path = max(files, key=lambda f: f.stat().st_mtime)
+
+                    # --- Leer metadatos del JSON ---
+                    title, description, thumbnail_url, channel = "", "", "", ""
+                    import json
+                    json_path = final_path.with_suffix('.info.json')
+
+                    if json_path.exists():
+                        try:
+                            with open(json_path, 'r', encoding='utf-8') as f:
+                                meta = json.load(f)
+                                title = meta.get("title", "")
+                                description = meta.get("description", "")
+                                thumbnail_url = meta.get("thumbnail", "")
+                                channel = meta.get("uploader", "")
+                            os.remove(json_path)
+                        except Exception as e:
+                            print(f"⚠️ Error leyendo metadatos JSON: {e}")
+
+                    return (str(final_path), f"✅ Éxito: {final_path.name}", title, description, thumbnail_url, channel)
                 else:
                     raise Exception(f"YT_DLP_ERROR: {output}")
 
