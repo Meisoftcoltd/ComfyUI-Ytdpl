@@ -58,9 +58,7 @@ class TestBrowserSelection(unittest.TestCase):
                 quality="best",
                 format="mp4"
             )
-        except Exception as e:
-            # If exception is raised, print it to debug
-            print(f"Exception raised: {e}")
+        except Exception:
             pass
 
         found = False

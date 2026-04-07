@@ -66,6 +66,7 @@ class TestNewPathLogic(unittest.TestCase):
 
         # Verify result
         self.assertEqual(result[0], str(expected_path))
+        self.assertEqual(len(result), 6) # Check that the tuple has 6 elements
 
         # Verify subprocess.run calls (get-filename)
         # It might be called multiple times if first fails, but here first succeeds.
