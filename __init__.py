@@ -140,12 +140,12 @@ class YTDLPVideoDownloader:
 
     def get_format_string(self, quality, ext, is_audio):
         if is_audio:
-            return f"bestaudio[ext={ext}]/bestaudio/best"
+            return "bestaudio/best"
         if quality == "best":
-            return "bestvideo+bestaudio/best"
+            return "bestvideo+bestaudio/bestvideo/best"
 
         h = quality.replace("p", "")
-        return f"bestvideo[height<={h}][ext={ext}]+bestaudio[ext=m4a]/best[height<={h}][ext={ext}]/best"
+        return f"bestvideo[height<={h}][ext={ext}]+bestaudio/bestvideo[height<={h}][ext={ext}]/best[height<={h}][ext={ext}]/best"
 
     def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, quality, format):
         if update_yt_dlp:
@@ -202,8 +202,12 @@ class YTDLPVideoDownloader:
                         "-P", str(dest_path),
                         "--no-overwrites",
                         "--yes-playlist",
+                        "--ignore-errors",
                         "--remote-components", "ejs:github"
                     ]
+
+                    if is_audio and not get_filename:
+                        cmd.extend(["-x", "--audio-format", format])
 
                     if cookie_path_to_use:
                         cmd.extend(["--cookies", str(cookie_path_to_use)])
@@ -285,6 +289,12 @@ class YTDLPVideoDownloader:
                         files = [f for f in dest_path.glob("*.*") if not f.name.endswith(".json")]
                         if not files: raise Exception("Archivo de video no encontrado tras descarga exitosa.")
                         final_path = max(files, key=lambda f: f.stat().st_mtime)
+
+                    if is_audio:
+                        actual_ext = final_path.suffix.lower().lstrip(".")
+                        audio_formats = ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aac", "mka"]
+                        if actual_ext not in audio_formats:
+                            raise Exception("❌ El vídeo se descargó correctamente pero no se encontró ninguna pista de audio para extraer. (Posible vídeo mudo de TikTok/YouTube).")
 
                     # --- Leer metadatos del JSON ---
                     title, description, thumbnail_url, channel = "", "", "", ""
