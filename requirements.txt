@@ -4,3 +4,6 @@ yt-dlp-ejs              # Motor para resolver el JS Challenge de YouTube
 curl-cffi               # Necesario para "impersonation" (Bypass HTTP 403)
 websockets              # Requerido por componentes internos de yt-dlp
 
+# --- Sistema Anti-Bloqueos (PO Tokens) ---
+bgutil-ytdlp-pot-provider # Plugin para evasión de bloqueos
+bgutil                  # Motor base para resolver Botguard

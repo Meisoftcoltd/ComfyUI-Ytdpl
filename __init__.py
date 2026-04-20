@@ -21,6 +21,7 @@ def install_missing_requirements():
         ("opencv-python", "cv2"),
         ("websockets", "websockets"),
         ("playwright", "playwright"),
+        ("bgutil", "bgutil"),
     ]
 
     missing = []
@@ -31,7 +32,7 @@ def install_missing_requirements():
     if missing:
         print(f"📥 ComfyUI-Ytdpl: Instalando dependencias faltantes: {missing}")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", *missing, "yt-dlp-ejs"])
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", *missing, "yt-dlp-ejs", "bgutil-ytdlp-pot-provider"])
             print("✅ Dependencias instaladas correctamente.")
             if "playwright" in missing:
                 print("📥 Instalando navegadores de Playwright...")
@@ -211,9 +212,9 @@ class YTDLPVideoDownloader:
 
                     if cookie_path_to_use:
                         cmd.extend(["--cookies", str(cookie_path_to_use)])
-                        cmd.extend(["--extractor-args", "youtube:player_client=tv_downgraded,web"])
+                        cmd.extend(["--extractor-args", "youtube:player_client=tv_downgraded,web;po_token=web+bgutil"])
                     else:
-                        cmd.extend(["--extractor-args", "youtube:player_client=android,tv"])
+                        cmd.extend(["--extractor-args", "youtube:player_client=android,tv;po_token=web+bgutil"])
 
                     # === CAMBIO: USAR NOMBRES GENÉRICOS DE NAVEGADOR PARA CURL-CFFI ===
                     if browser_source != "Ninguno":
