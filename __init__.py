@@ -14,6 +14,7 @@ if deno_path not in os.environ.get("PATH", ""):
     os.environ["PATH"] = f"{deno_path}:{os.environ.get('PATH', '')}"
 
 def install_missing_requirements():
+    # 🚀 FIX: Mapeo exacto entre el nombre en pip y el módulo interno del plugin
     requirements = [
         ("yt-dlp", "yt_dlp"),
         ("curl-cffi", "curl_cffi"),
@@ -21,18 +22,23 @@ def install_missing_requirements():
         ("opencv-python", "cv2"),
         ("websockets", "websockets"),
         ("playwright", "playwright"),
-        ("bgutil", "bgutil"),
+        ("yt-dlp-ejs", "yt_dlp_plugins.extractor.ejs"),
+        ("bgutil-ytdlp-pot-provider", "yt_dlp_plugins.extractor.getpot_bgutil")
     ]
 
     missing = []
     for pkg, imp in requirements:
-        if importlib.util.find_spec(imp) is None:
+        try:
+            if importlib.util.find_spec(imp) is None:
+                missing.append(pkg)
+        except ModuleNotFoundError:
             missing.append(pkg)
 
     if missing:
         print(f"📥 ComfyUI-Ytdpl: Instalando dependencias faltantes: {missing}")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", *missing, "yt-dlp-ejs", "bgutil-ytdlp-pot-provider"])
+            # 🚀 FIX: Pasamos el array limpio 'missing' sin forzar sufijos problemáticos
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", *missing])
             print("✅ Dependencias instaladas correctamente.")
             if "playwright" in missing:
                 print("📥 Instalando navegadores de Playwright...")

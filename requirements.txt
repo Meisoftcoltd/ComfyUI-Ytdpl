@@ -5,5 +5,4 @@ curl-cffi               # Necesario para "impersonation" (Bypass HTTP 403)
 websockets              # Requerido por componentes internos de yt-dlp
 
 # --- Sistema Anti-Bloqueos (PO Tokens) ---
-bgutil-ytdlp-pot-provider # Plugin para evasión de bloqueos
-bgutil                  # Motor base para resolver Botguard
+bgutil-ytdlp-pot-provider # Plugin oficial de la comunidad para Botguard
