@@ -142,11 +142,15 @@ class YTDLPVideoDownloader:
     def get_format_string(self, quality, ext, is_audio):
         if is_audio:
             return "bestaudio/best"
+
+        # 🚀 FIX: Prioridad absoluta a H.264 (avc) para evitar el bug de torchcodec con el bytevc1 de TikTok
+        v_avc = "bestvideo[vcodec*=avc]"
+
         if quality == "best":
-            return "bestvideo+bestaudio/bestvideo/best"
+            return f"{v_avc}+bestaudio/bestvideo+bestaudio/best"
 
         h = quality.replace("p", "")
-        return f"bestvideo[height<={h}][ext={ext}]+bestaudio/bestvideo[height<={h}][ext={ext}]/best[height<={h}][ext={ext}]/best"
+        return f"{v_avc}[height<={h}][ext={ext}]+bestaudio/bestvideo[height<={h}][ext={ext}]+bestaudio/best[height<={h}][ext={ext}]/best"
 
     def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, quality, format):
         if update_yt_dlp:
