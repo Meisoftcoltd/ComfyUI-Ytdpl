@@ -146,18 +146,41 @@ class YTDLPVideoDownloader:
         return m.digest().hex()
 
     def get_format_string(self, quality, ext, is_audio):
+        print(f"\n{'='*60}")
+        print(f"🎯 [YT-DLP] EVALUADOR DE FORMATOS Y CÓDECS")
+
         if is_audio:
-            return "bestaudio/best"
+            f_str = "bestaudio/best"
+            print(f"   -> 🎵 Modo: Solo Audio")
+            print(f"   -> 🛠️ Regla aplicada: {f_str}")
+            print(f"{'='*60}\n")
+            return f_str
 
-        # 🚀 FIX DEFINITIVO TIKTOK/AUDIO: Forzar contenedor H.264 (avc) pre-mezclado.
-        # TikTok sirve el formato 'bytevc1' a menudo sin pista de audio o ilegible.
-        # Al exigir 'vcodec*=avc', obligamos a yt-dlp a bajar el MP4 estándar que SÍ trae el audio integrado,
-        # evitando además el colapso de RAM por fusión de pistas en FFmpeg.
-        if quality == "best":
-            return "best[vcodec*=avc][ext=mp4]/best[vcodec*=avc]/best[ext=mp4]/best/bestvideo+bestaudio/best"
+        h_filter = "" if quality == "best" else f"[height<={quality.replace('p', '')}]"
 
-        h = quality.replace("p", "")
-        return f"best[height<={h}][vcodec*=avc][ext={ext}]/best[height<={h}][vcodec*=avc]/best[height<={h}]/bestvideo[height<={h}][ext={ext}]+bestaudio/best[height<={h}][ext={ext}]/best"
+        # 🚀 FIX DEFINITIVO: Red de seguridad de fallbacks.
+        # 1. Calidad pedida en H.264 con audio (Ideal).
+        # 2. Si TikTok no reporta height: CUALQUIER resolución en H.264 con audio (Salvavidas 1).
+        # 3. Fallbacks genéricos de seguridad.
+        f_str = (
+            f"best{h_filter}[vcodec*=avc][acodec!=none]/"
+            f"best{h_filter}[vcodec*=avc]/"
+            f"bestvideo{h_filter}[vcodec*=avc]+bestaudio/"
+            f"best[vcodec*=avc][acodec!=none]/"  # <- Salvavidas principal para TikTok
+            f"best[vcodec*=avc]/"
+            f"bestvideo[vcodec*=avc]+bestaudio/"
+            f"best{h_filter}/"
+            f"best"
+        )
+
+        print(f"   -> 📺 Modo: Video + Audio")
+        print(f"   -> 📏 Calidad objetivo: {quality} | Contenedor: {ext}")
+        print(f"   -> 🛡️ Red de seguridad generada (Prioridad H.264):")
+        for i, fallback in enumerate(f_str.split('/'), 1):
+            print(f"      {i}. {fallback}")
+        print(f"{'='*60}\n")
+
+        return f_str
 
     def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, quality, format):
         if update_yt_dlp:
@@ -278,7 +301,11 @@ class YTDLPVideoDownloader:
                 print(f"📥 Iniciando descarga ({selected_quality})...")
                 cmd_dl = build_cmd(selected_quality, get_filename=False)
 
-                print("\n--- Registro de yt-dlp (ComfyUI) ---")
+                # 🚀 NUEVO LOG: Imprimir el comando exacto para debug
+                print(f"⚙️ [YT-DLP] Ejecutando comando final en el sistema:")
+                print(f"   -> {' '.join(cmd_dl)}\n")
+
+                print("--- Registro de yt-dlp (ComfyUI) ---")
                 proc = subprocess.Popen(cmd_dl, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
                 output_lines = []
