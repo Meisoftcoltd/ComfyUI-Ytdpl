@@ -149,14 +149,16 @@ class YTDLPVideoDownloader:
         if is_audio:
             return "bestaudio/best"
 
-        # 🚀 FIX: Prioridad absoluta a H.264 (avc) para evitar el bug de torchcodec con el bytevc1 de TikTok
+        # 🚀 FIX OOM/FFprobe: Priorizar un archivo ÚNICO pre-mezclado (best) con H.264.
+        # Evita que FFmpeg intente fusionar pistas separadas, lo que causa "Killed" (Falta de RAM) o errores de FFprobe.
+        single_avc = "best[vcodec*=avc]"
         v_avc = "bestvideo[vcodec*=avc]"
 
         if quality == "best":
-            return f"{v_avc}+bestaudio/bestvideo+bestaudio/best"
+            return f"{single_avc}/{v_avc}+bestaudio/best"
 
         h = quality.replace("p", "")
-        return f"{v_avc}[height<={h}][ext={ext}]+bestaudio/bestvideo[height<={h}][ext={ext}]+bestaudio/best[height<={h}][ext={ext}]/best"
+        return f"{single_avc}[height<={h}][ext={ext}]/{v_avc}[height<={h}][ext={ext}]+bestaudio/best[height<={h}][ext={ext}]/best"
 
     def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, quality, format):
         if update_yt_dlp:
