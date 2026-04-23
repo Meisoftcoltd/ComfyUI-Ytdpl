@@ -149,13 +149,15 @@ class YTDLPVideoDownloader:
         if is_audio:
             return "bestaudio/best"
 
-        # 🚀 FIX: Prioridad Absoluta al archivo PRE-MEZCLADO (Video + Audio unidos de fábrica).
-        # Evita que FFmpeg colapse la RAM intentando fusionar pistas separadas de TikTok.
+        # 🚀 FIX DEFINITIVO TIKTOK/AUDIO: Forzar contenedor H.264 (avc) pre-mezclado.
+        # TikTok sirve el formato 'bytevc1' a menudo sin pista de audio o ilegible.
+        # Al exigir 'vcodec*=avc', obligamos a yt-dlp a bajar el MP4 estándar que SÍ trae el audio integrado,
+        # evitando además el colapso de RAM por fusión de pistas en FFmpeg.
         if quality == "best":
-            return "b[ext=mp4]/b/bestvideo+bestaudio/best"
+            return "best[vcodec*=avc][ext=mp4]/best[vcodec*=avc]/best[ext=mp4]/best/bestvideo+bestaudio/best"
 
         h = quality.replace("p", "")
-        return f"b[height<={h}][ext={ext}]/b[height<={h}]/bestvideo[height<={h}][ext={ext}]+bestaudio/best[height<={h}][ext={ext}]/best"
+        return f"best[height<={h}][vcodec*=avc][ext={ext}]/best[height<={h}][vcodec*=avc]/best[height<={h}]/bestvideo[height<={h}][ext={ext}]+bestaudio/best[height<={h}][ext={ext}]/best"
 
     def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, quality, format):
         if update_yt_dlp:
