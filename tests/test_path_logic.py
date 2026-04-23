@@ -73,7 +73,9 @@ class TestNewPathLogic(unittest.TestCase):
         self.assertTrue(mock_run.called)
 
         # Verify arguments of run (get-filename)
-        args_run, _ = mock_run.call_args
+        # mock_run is called twice: once for get-filename and once for ffprobe (because of the new logic)
+        # We need to get the arguments of the first call
+        args_run = mock_run.call_args_list[0][0]
         cmd_run = args_run[0]
         self.assertIn("-P", cmd_run)
         p_index = cmd_run.index("-P")

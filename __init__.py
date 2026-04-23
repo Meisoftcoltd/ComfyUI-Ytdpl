@@ -149,16 +149,13 @@ class YTDLPVideoDownloader:
         if is_audio:
             return "bestaudio/best"
 
-        # 🚀 FIX OOM/FFprobe: Priorizar un archivo ÚNICO pre-mezclado (best) con H.264.
-        # Evita que FFmpeg intente fusionar pistas separadas, lo que causa "Killed" (Falta de RAM) o errores de FFprobe.
-        single_avc = "best[vcodec*=avc]"
-        v_avc = "bestvideo[vcodec*=avc]"
-
+        # 🚀 FIX: Prioridad Absoluta al archivo PRE-MEZCLADO (Video + Audio unidos de fábrica).
+        # Evita que FFmpeg colapse la RAM intentando fusionar pistas separadas de TikTok.
         if quality == "best":
-            return f"{single_avc}/{v_avc}+bestaudio/best"
+            return "b[ext=mp4]/b/bestvideo+bestaudio/best"
 
         h = quality.replace("p", "")
-        return f"{single_avc}[height<={h}][ext={ext}]/{v_avc}[height<={h}][ext={ext}]+bestaudio/best[height<={h}][ext={ext}]/best"
+        return f"b[height<={h}][ext={ext}]/b[height<={h}]/bestvideo[height<={h}][ext={ext}]+bestaudio/best[height<={h}][ext={ext}]/best"
 
     def download_video(self, url, cookies_text, cookies_file, browser_source, update_yt_dlp, quality, format):
         if update_yt_dlp:
@@ -308,6 +305,30 @@ class YTDLPVideoDownloader:
                         audio_formats = ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aac", "mka"]
                         if actual_ext not in audio_formats:
                             raise Exception("❌ El vídeo se descargó correctamente pero no se encontró ninguna pista de audio para extraer. (Posible vídeo mudo de TikTok/YouTube).")
+
+                    if not is_audio:
+                        # 🔍 SISTEMA DE VERIFICACIÓN DE CÓDECS
+                        try:
+                            probe_cmd = [
+                                "ffprobe", "-v", "error",
+                                "-select_streams", "a:0",
+                                "-show_entries", "stream=codec_name",
+                                "-of", "default=noprint_wrappers=1:nokey=1",
+                                str(final_path)
+                            ]
+                            probe_res = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=15)
+                            audio_codec = probe_res.stdout.strip()
+
+                            if not audio_codec or "unable to obtain" in probe_res.stderr.lower():
+                                print(f"\n⚠️ [AUDITORÍA DE AUDIO]: No se detectó un códec de audio válido en {final_path.name}.")
+                                print("👉 Posibles causas:")
+                                print("   1. El video original NO tiene sonido (es mudo en la fuente).")
+                                print("   2. Faltan librerías de códecs. Para asegurarte, ejecuta en tu terminal WSL/Linux:")
+                                print("      sudo apt update && sudo apt install ffmpeg libavcodec-extra -y\n")
+                            else:
+                                print(f"🎵 [AUDITORÍA DE AUDIO]: Códec detectado correctamente -> {audio_codec.upper()}")
+                        except Exception as e:
+                            print(f"⚠️ [AUDITORÍA DE AUDIO]: No se pudo ejecutar ffprobe: {e}")
 
                     # --- Leer metadatos del JSON ---
                     title, description, thumbnail_url, channel = "", "", "", ""
