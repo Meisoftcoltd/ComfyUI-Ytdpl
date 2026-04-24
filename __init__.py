@@ -199,6 +199,17 @@ class YTDLPVideoDownloader:
         if not url.strip():
             raise Exception("❌ La URL está vacía.")
 
+        # 🚀 FIX: Bypass para Carruseles de Fotos de TikTok
+        # yt-dlp no reconoce las URLs con "/photo/". Si la cambiamos a "/video/",
+        # la API de TikTok entrega el mismo medio y yt-dlp lo extrae perfectamente.
+        url_lower = url.lower()
+        if "tiktok.com" in url_lower and "/photo/" in url_lower:
+            print("🔄 [TIKTOK BYPASS]: Detectada URL de galería de fotos. Adaptando enlace para yt-dlp...")
+            # Reemplazamos solo la primera aparición por seguridad
+            import re
+            url = re.sub(r'/photo/', '/video/', url, count=1, flags=re.IGNORECASE)
+            print(f"🔗 Nueva URL inyectada: {url}")
+
         dest_path = self.output_dir
 
         is_audio = format in ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aac"]
