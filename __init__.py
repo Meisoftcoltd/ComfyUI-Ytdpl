@@ -158,24 +158,23 @@ class YTDLPVideoDownloader:
 
         h_filter = "" if quality == "best" else f"[height<={quality.replace('p', '')}]"
 
-        # 🚀 FIX DEFINITIVO: Red de seguridad de fallbacks.
-        # 1. Calidad pedida en H.264 con audio (Ideal).
-        # 2. Si TikTok no reporta height: CUALQUIER resolución en H.264 con audio (Salvavidas 1).
-        # 3. Fallbacks genéricos de seguridad.
+        # 🚀 FIX DEFINITIVO 5.0 (El fin de la saga TikTok):
+        # 1. TikTok etiqueta el H.264 como 'h264', no como 'avc'. Priorizamos h264.
+        # 2. Bloqueo explícito de 'bytevc1' (Contenedor HEVC problemático/mudo de TikTok).
+        # 3. Permitimos bestvideo+bestaudio (La fusión a mp4 se hace por 'copy' usando 0 RAM).
         f_str = (
-            f"best{h_filter}[vcodec*=avc][acodec!=none]/"
-            f"best{h_filter}[vcodec*=avc]/"
-            f"bestvideo{h_filter}[vcodec*=avc]+bestaudio/"
-            f"best[vcodec*=avc][acodec!=none]/"  # <- Salvavidas principal para TikTok
-            f"best[vcodec*=avc]/"
-            f"bestvideo[vcodec*=avc]+bestaudio/"
+            f"bestvideo{h_filter}[vcodec*=h264]+bestaudio/"
+            f"best{h_filter}[vcodec*=h264]/"
+            f"bestvideo{h_filter}[vcodec!=bytevc1]+bestaudio/"
+            f"best{h_filter}[vcodec!=bytevc1]/"
+            f"bestvideo{h_filter}+bestaudio/"
             f"best{h_filter}/"
             f"best"
         )
 
         print(f"   -> 📺 Modo: Video + Audio")
         print(f"   -> 📏 Calidad objetivo: {quality} | Contenedor: {ext}")
-        print(f"   -> 🛡️ Red de seguridad generada (Prioridad H.264):")
+        print(f"   -> 🛡️ Red de seguridad generada (Filtro Anti-Bytevc1):")
         for i, fallback in enumerate(f_str.split('/'), 1):
             print(f"      {i}. {fallback}")
         print(f"{'='*60}\n")
